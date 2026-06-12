@@ -273,7 +273,9 @@ const server = createServer(async (req, res) => {
         guesserScore.score += 1
         room.scores.set(clientId, guesserScore)
 
-        room.correctGuess = { player, word: room.word }
+        const guessedWord = room.word
+        room.correctGuess = { player, word: guessedWord }
+        nextRound(room, `${player} 猜对了「${guessedWord}」，自动进入下一轮。`)
       }
       if (!correct && nextWrongCount >= 3) {
         nextRound(room, `${player} 已经猜错 3 次，自动进入下一轮。`)
