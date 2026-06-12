@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>多人涂鸦白板游戏 MVP</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="topbar" aria-label="房间控制">
+        <div class="room-block">
+          <span class="label">房间码</span>
+          <div class="room-row">
+            <input id="roomInput" aria-label="房间码" maxlength="8" autocomplete="off" />
+            <button id="joinBtn" type="button">加入</button>
+            <button id="newRoomBtn" type="button">新房间</button>
+          </div>
+        </div>
+        <div class="status-strip" aria-live="polite">
+          <div><span class="label">题目</span><strong id="promptText">准备中</strong></div>
+          <div><span class="label">倒计时</span><strong id="timerText">01:30</strong></div>
+          <div><span class="label">在线</span><strong id="playersText">1</strong></div>
+          <div><span class="label">连接</span><strong id="connectionText">连接中</strong></div>
+        </div>
+      </section>
+
+      <section class="toolbelt" aria-label="画笔工具">
+        <div class="colors" aria-label="颜色">
+          <button class="swatch active" type="button" data-color="#111827" aria-label="黑色"></button>
+          <button class="swatch" type="button" data-color="#ef4444" aria-label="红色"></button>
+          <button class="swatch" type="button" data-color="#f59e0b" aria-label="黄色"></button>
+          <button class="swatch" type="button" data-color="#10b981" aria-label="绿色"></button>
+          <button class="swatch" type="button" data-color="#2563eb" aria-label="蓝色"></button>
+          <button class="swatch" type="button" data-color="#7c3aed" aria-label="紫色"></button>
+        </div>
+        <label class="size-control"><span class="label">笔刷</span><input id="sizeInput" type="range" min="2" max="28" value="6" /></label>
+        <button id="undoBtn" type="button">撤销</button>
+        <button id="clearBtn" type="button">清空</button>
+        <button id="exportBtn" type="button">导出 PNG</button>
+        <button id="roundBtn" type="button">下一轮</button>
+      </section>
+
+      <section class="board-wrap" aria-label="实时画布"><canvas id="board"></canvas></section>
+
+      <section class="vote-panel" aria-label="投票">
+        <button type="button" data-vote="keep">保留神作 <strong id="voteKeep">0</strong></button>
+        <button type="button" data-vote="chaos">继续加料 <strong id="voteChaos">0</strong></button>
+        <button type="button" data-vote="restart">重开一局 <strong id="voteRestart">0</strong></button>
+      </section>
+    </main>
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>
