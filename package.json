@@ -8,6 +8,9 @@
     "start": "node doodle-server.mjs",
     "dev": "node doodle-server.mjs"
   },
+  "dependencies": {
+    "qrcode": "^1.5.4"
+  },
   "engines": {
     "node": ">=20"
   }

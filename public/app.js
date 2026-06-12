@@ -3,18 +3,25 @@ const ctx = canvas.getContext('2d')
 const roomInput = document.querySelector('#roomInput')
 const joinBtn = document.querySelector('#joinBtn')
 const newRoomBtn = document.querySelector('#newRoomBtn')
-const promptText = document.querySelector('#promptText')
+const roomQr = document.querySelector('#roomQr')
+const roomCodeText = document.querySelector('#roomCodeText')
+const shareLink = document.querySelector('#shareLink')
+const copyLinkBtn = document.querySelector('#copyLinkBtn')
+const drawerText = document.querySelector('#drawerText')
+const wordText = document.querySelector('#wordText')
 const timerText = document.querySelector('#timerText')
 const playersText = document.querySelector('#playersText')
-const connectionText = document.querySelector('#connectionText')
 const sizeInput = document.querySelector('#sizeInput')
 const undoBtn = document.querySelector('#undoBtn')
 const clearBtn = document.querySelector('#clearBtn')
 const exportBtn = document.querySelector('#exportBtn')
 const roundBtn = document.querySelector('#roundBtn')
-const voteKeep = document.querySelector('#voteKeep')
-const voteChaos = document.querySelector('#voteChaos')
-const voteRestart = document.querySelector('#voteRestart')
+const roleBadge = document.querySelector('#roleBadge')
+const guessForm = document.querySelector('#guessForm')
+const guessInput = document.querySelector('#guessInput')
+const guessBtn = document.querySelector('#guessBtn')
+const resultText = document.querySelector('#resultText')
+const guessList = document.querySelector('#guessList')
 
 const state = {
   room: new URLSearchParams(location.search).get('room') || '',
@@ -24,10 +31,15 @@ const state = {
   currentStroke: null,
   eventSource: null,
   reconnectTimer: null,
-  roundEndsAt: Date.now() + 90_000,
-  player: `玩家${Math.floor(100 + Math.random() * 900)}`,
-  clientId: crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random())
+  roundEndsAt: Date.now() + 120_000,
+  isDrawer: false,
+  correctGuess: null,
+  player: localStorage.getItem('doodle-player') || `玩家${Math.floor(100 + Math.random() * 900)}`,
+  clientId: sessionStorage.getItem('doodle-client-id') || crypto.randomUUID()
 }
+
+localStorage.setItem('doodle-player', state.player)
+sessionStorage.setItem('doodle-client-id', state.clientId)
 
 function normalizeRoom(value) {
   return String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8)
@@ -103,12 +115,12 @@ function drawAll() {
 }
 
 function startStroke(event) {
+  if (!state.isDrawer || state.correctGuess) return
   canvas.setPointerCapture(event.pointerId)
   state.currentStroke = {
     clientId: state.clientId,
     color: state.color,
     size: state.size,
-    player: state.player,
     points: [canvasPoint(event)]
   }
   drawAll()
@@ -131,10 +143,45 @@ async function endStroke() {
   if (stroke.points.length > 1) await postJson(`/api/rooms/${state.room}/strokes`, stroke)
 }
 
-function updateVotes(votes) {
-  voteKeep.textContent = String(votes.keep || 0)
-  voteChaos.textContent = String(votes.chaos || 0)
-  voteRestart.textContent = String(votes.restart || 0)
+function renderGuesses(guesses) {
+  guessList.innerHTML = ''
+  for (const guess of guesses || []) {
+    const item = document.createElement('div')
+    item.className = guess.correct ? 'guess-item correct' : 'guess-item'
+    item.textContent = `${guess.player}: ${guess.text}${guess.correct ? ' - 猜中了' : ''}`
+    guessList.append(item)
+  }
+}
+
+function updateInvite() {
+  if (!state.room) return
+  const url = `${location.origin}${location.pathname}?room=${state.room}`
+  roomCodeText.textContent = state.room
+  shareLink.value = url
+  roomQr.src = `/api/rooms/${state.room}/qr?url=${encodeURIComponent(url)}`
+}
+
+function setRoleUi(snapshot) {
+  state.isDrawer = Boolean(snapshot.isDrawer)
+  state.correctGuess = snapshot.correctGuess
+  drawerText.textContent = snapshot.drawer?.name || '等待玩家'
+  wordText.textContent = snapshot.isDrawer ? `你要画：${snapshot.word}` : `提示：${snapshot.wordHint}`
+  playersText.textContent = String(snapshot.players || 1)
+  roleBadge.textContent = snapshot.isDrawer ? '你是画手：只能你能画，别人看不到词' : '你是猜词者：观看并输入答案'
+  roleBadge.classList.toggle('drawer', snapshot.isDrawer)
+  guessInput.disabled = snapshot.isDrawer || Boolean(snapshot.correctGuess)
+  guessBtn.disabled = snapshot.isDrawer || Boolean(snapshot.correctGuess)
+  undoBtn.disabled = !snapshot.isDrawer
+  clearBtn.disabled = !snapshot.isDrawer
+  canvas.classList.toggle('viewer', !snapshot.isDrawer)
+
+  if (snapshot.correctGuess) {
+    resultText.textContent = `${snapshot.correctGuess.player} 猜中了，答案是「${snapshot.correctGuess.word}」。`
+  } else if (snapshot.isDrawer) {
+    resultText.textContent = '你来画，不能把词语写在画布上。'
+  } else {
+    resultText.textContent = '你来猜，答案不是越长越好，是越准越好。'
+  }
 }
 
 function applySnapshot(snapshot) {
@@ -142,10 +189,10 @@ function applySnapshot(snapshot) {
   state.strokes = snapshot.strokes || []
   state.roundEndsAt = snapshot.roundEndsAt || Date.now()
   roomInput.value = state.room
-  promptText.textContent = snapshot.prompt || '自由涂鸦'
-  playersText.textContent = String(snapshot.players || 1)
-  updateVotes(snapshot.votes || {})
   history.replaceState(null, '', `?room=${state.room}`)
+  updateInvite()
+  setRoleUi(snapshot)
+  renderGuesses(snapshot.guesses)
   drawAll()
 }
 
@@ -154,16 +201,12 @@ function connect(room) {
   if (!state.room) return
   if (state.eventSource) state.eventSource.close()
   clearTimeout(state.reconnectTimer)
-  connectionText.textContent = '连接中'
-  const source = new EventSource(`/api/rooms/${state.room}/events`)
+  roleBadge.textContent = '连接中'
+
+  const params = new URLSearchParams({ clientId: state.clientId, name: state.player })
+  const source = new EventSource(`/api/rooms/${state.room}/events?${params}`)
   state.eventSource = source
-  source.addEventListener('open', () => {
-    connectionText.textContent = '已连接'
-  })
-  source.addEventListener('snapshot', (event) => {
-    applySnapshot(JSON.parse(event.data))
-    connectionText.textContent = '已连接'
-  })
+  source.addEventListener('snapshot', (event) => applySnapshot(JSON.parse(event.data)))
   source.addEventListener('stroke', (event) => {
     const stroke = JSON.parse(event.data)
     if (!state.strokes.some((item) => item.id === stroke.id)) {
@@ -171,24 +214,16 @@ function connect(room) {
       drawAll()
     }
   })
-  source.addEventListener('votes', (event) => updateVotes(JSON.parse(event.data)))
-  source.addEventListener('clear', () => {
-    state.strokes = []
-    drawAll()
-  })
-  source.addEventListener('presence', (event) => {
-    playersText.textContent = String(JSON.parse(event.data).players || 1)
-  })
   source.addEventListener('error', () => {
-    connectionText.textContent = '重连中'
+    roleBadge.textContent = '重连中'
     source.close()
     state.reconnectTimer = setTimeout(() => connect(state.room), 1200)
   })
 }
 
 async function createRoom() {
-  const created = await postJson('/api/rooms')
-  connect(created.code)
+  const room = await postJson('/api/rooms')
+  connect(room.code)
 }
 
 function tickTimer() {
@@ -200,7 +235,7 @@ function tickTimer() {
 
 function exportPng() {
   const link = document.createElement('a')
-  link.download = `doodle-${state.room || 'room'}.png`
+  link.download = `guess-${state.room || 'room'}.png`
   link.href = canvas.toDataURL('image/png')
   link.click()
 }
@@ -224,16 +259,24 @@ roomInput.addEventListener('input', () => {
   roomInput.value = normalizeRoom(roomInput.value)
 })
 newRoomBtn.addEventListener('click', createRoom)
-undoBtn.addEventListener('click', () => postJson(`/api/rooms/${state.room}/undo`, { clientId: state.clientId }))
-clearBtn.addEventListener('click', async () => {
-  state.strokes = []
-  drawAll()
-  await postJson(`/api/rooms/${state.room}/clear`)
+copyLinkBtn.addEventListener('click', async () => {
+  if (!shareLink.value) return
+  await navigator.clipboard.writeText(shareLink.value)
+  copyLinkBtn.textContent = '已复制'
+  setTimeout(() => {
+    copyLinkBtn.textContent = '复制链接'
+  }, 1200)
 })
+undoBtn.addEventListener('click', () => postJson(`/api/rooms/${state.room}/undo`, { clientId: state.clientId }))
+clearBtn.addEventListener('click', () => postJson(`/api/rooms/${state.room}/clear`, { clientId: state.clientId }))
 exportBtn.addEventListener('click', exportPng)
-roundBtn.addEventListener('click', () => postJson(`/api/rooms/${state.room}/round`))
-document.querySelectorAll('[data-vote]').forEach((button) => {
-  button.addEventListener('click', () => postJson(`/api/rooms/${state.room}/vote`, { choice: button.dataset.vote }))
+roundBtn.addEventListener('click', () => postJson(`/api/rooms/${state.room}/round`, { clientId: state.clientId }))
+guessForm.addEventListener('submit', async (event) => {
+  event.preventDefault()
+  const text = guessInput.value.trim()
+  if (!text) return
+  guessInput.value = ''
+  await postJson(`/api/rooms/${state.room}/guess`, { clientId: state.clientId, player: state.player, text })
 })
 
 canvas.addEventListener('pointerdown', startStroke)

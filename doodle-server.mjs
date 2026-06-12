@@ -9,6 +9,11 @@ const publicDir = join(__dirname, 'public')
 const port = Number(process.env.PORT || 4173)
 const rooms = new Map()
 
+const words = [
+  '月亮', '披萨', '机器人', '雨伞', '火车', '恐龙', '吉他', '蛋糕', '足球', '飞机',
+  '鲸鱼', '城堡', '雪人', '相机', '猫头鹰', '风筝', '蘑菇', '钥匙', '海盗船', '宇航员'
+]
+
 const mimeTypes = {
   '.html': 'text/html; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
@@ -17,75 +22,122 @@ const mimeTypes = {
   '.png': 'image/png'
 }
 
-function code(value) {
+function cleanRoomCode(value) {
   return String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8)
 }
 
-function newCode() {
+function makeRoomCode() {
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
   let result = ''
   for (let i = 0; i < 5; i += 1) result += alphabet[Math.floor(Math.random() * alphabet.length)]
-  return rooms.has(result) ? newCode() : result
+  return rooms.has(result) ? makeRoomCode() : result
 }
 
-function prompt() {
-  return ['画一座未来游乐场', '接力画一个外星厨房', '让大家猜：这是什么怪机器？', '三分钟内画出最离谱的海报', '每个人只加一笔，拼成一个故事'][
-    Math.floor(Math.random() * 5)
-  ]
+function nextWord() {
+  return words[Math.floor(Math.random() * words.length)]
 }
 
-function room(roomCode) {
-  const key = code(roomCode) || newCode()
-  if (!rooms.has(key)) {
-    rooms.set(key, {
-      code: key,
-      clients: new Map(),
-      strokes: [],
-      votes: { keep: 0, chaos: 0, restart: 0 },
-      roundEndsAt: Date.now() + 90_000,
-      prompt: prompt()
-    })
+function makeRoom(code) {
+  return {
+    code,
+    clients: new Map(),
+    order: [],
+    strokes: [],
+    guesses: [],
+    drawerId: '',
+    word: nextWord(),
+    roundEndsAt: Date.now() + 120_000,
+    correctGuess: null
   }
+}
+
+function getRoom(roomCode) {
+  const key = cleanRoomCode(roomCode) || makeRoomCode()
+  if (!rooms.has(key)) rooms.set(key, makeRoom(key))
   return rooms.get(key)
 }
 
-function snapshot(r) {
-  return { code: r.code, strokes: r.strokes, votes: r.votes, roundEndsAt: r.roundEndsAt, prompt: r.prompt, players: r.clients.size }
+function publicClient(client) {
+  return client ? { id: client.id, name: client.name } : null
 }
 
-function json(res, status, data) {
+function snapshot(room, clientId) {
+  const drawer = room.clients.get(room.drawerId)
+  const isDrawer = clientId === room.drawerId
+  return {
+    code: room.code,
+    strokes: room.strokes,
+    guesses: room.guesses.slice(-12),
+    players: room.clients.size,
+    drawer: publicClient(drawer),
+    isDrawer,
+    word: isDrawer ? room.word : '',
+    wordHint: isDrawer ? room.word : `${room.word.length} 个字`,
+    roundEndsAt: room.roundEndsAt,
+    correctGuess: room.correctGuess
+  }
+}
+
+function sendJson(res, status, data) {
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8' })
   res.end(JSON.stringify(data))
 }
 
-function event(res, name, data) {
+function sendEvent(res, name, data) {
   res.write(`event: ${name}\n`)
   res.write(`data: ${JSON.stringify(data)}\n\n`)
 }
 
-function broadcast(r, name, data) {
-  for (const client of r.clients.values()) event(client.res, name, data)
+function broadcastSnapshot(room) {
+  for (const client of room.clients.values()) {
+    sendEvent(client.res, 'snapshot', snapshot(room, client.id))
+  }
 }
 
-async function body(req) {
+async function readBody(req) {
   const chunks = []
   for await (const chunk of req) chunks.push(chunk)
   return JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}')
 }
 
-async function staticFile(req, res) {
+function chooseDrawer(room) {
+  room.order = room.order.filter((id) => room.clients.has(id))
+  if (!room.drawerId || !room.clients.has(room.drawerId)) {
+    room.drawerId = room.order[0] || ''
+  }
+}
+
+function nextRound(room) {
+  room.order = room.order.filter((id) => room.clients.has(id))
+  if (room.order.length > 0) {
+    const currentIndex = Math.max(0, room.order.indexOf(room.drawerId))
+    room.drawerId = room.order[(currentIndex + 1) % room.order.length]
+  }
+  room.strokes = []
+  room.guesses = []
+  room.word = nextWord()
+  room.correctGuess = null
+  room.roundEndsAt = Date.now() + 120_000
+}
+
+async function serveStatic(req, res) {
   const url = new URL(req.url, `http://${req.headers.host}`)
   const rawPath = url.pathname === '/' ? '/index.html' : url.pathname
   const safePath = normalize(decodeURIComponent(rawPath)).replace(/^(\.\.[/\\])+/, '')
   const filePath = join(publicDir, safePath)
+
   if (!filePath.startsWith(publicDir)) {
     res.writeHead(403)
     res.end('Forbidden')
     return
   }
+
   try {
     const content = await readFile(filePath)
-    res.writeHead(200, { 'content-type': mimeTypes[extname(filePath)] || 'application/octet-stream', 'cache-control': 'no-store' })
+    res.writeHead(200, {
+      'content-type': mimeTypes[extname(filePath)] || 'application/octet-stream',
+      'cache-control': 'no-store'
+    })
     res.end(content)
   } catch {
     res.writeHead(404)
@@ -97,102 +149,138 @@ const server = createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`)
 
   if (req.method === 'GET' && url.pathname === '/healthz') {
-    json(res, 200, { ok: true })
+    sendJson(res, 200, { ok: true })
     return
   }
 
   if (req.method === 'POST' && url.pathname === '/api/rooms') {
-    json(res, 201, snapshot(room(newCode())))
+    const room = getRoom(makeRoomCode())
+    sendJson(res, 201, { code: room.code })
     return
   }
 
-  const match = url.pathname.match(/^\/api\/rooms\/([A-Z0-9]+)(?:\/(events|strokes|vote|clear|round|undo))?$/i)
+  const match = url.pathname.match(/^\/api\/rooms\/([A-Z0-9]+)(?:\/(events|strokes|guess|clear|round|undo|qr))?$/i)
   if (match) {
-    const r = room(match[1])
+    const room = getRoom(match[1])
     const action = match[2] || ''
 
+    if (req.method === 'GET' && action === 'qr') {
+      const requestedUrl = String(url.searchParams.get('url') || '').slice(0, 500)
+      const forwardedProto = req.headers['x-forwarded-proto']
+      const proto = Array.isArray(forwardedProto) ? forwardedProto[0] : forwardedProto || 'https'
+      const shareUrl = requestedUrl || `${proto}://${req.headers.host}/?room=${room.code}`
+      const QRCode = await import('qrcode')
+      const svg = await QRCode.toString(shareUrl, {
+        type: 'svg',
+        margin: 1,
+        width: 220,
+        errorCorrectionLevel: 'M'
+      })
+      res.writeHead(200, {
+        'content-type': 'image/svg+xml; charset=utf-8',
+        'cache-control': 'no-store'
+      })
+      res.end(svg)
+      return
+    }
+
     if (req.method === 'GET' && action === 'events') {
-      const id = randomUUID()
+      const id = String(url.searchParams.get('clientId') || randomUUID()).slice(0, 80)
+      const name = String(url.searchParams.get('name') || '玩家').slice(0, 24)
       res.writeHead(200, {
         'content-type': 'text/event-stream; charset=utf-8',
         'cache-control': 'no-cache, no-transform',
         connection: 'keep-alive',
         'x-accel-buffering': 'no'
       })
-      r.clients.set(id, { res })
-      event(res, 'snapshot', snapshot(r))
-      broadcast(r, 'presence', { players: r.clients.size })
-      const heartbeat = setInterval(() => event(res, 'ping', { at: Date.now() }), 15_000)
+      room.clients.set(id, { id, name, res })
+      if (!room.order.includes(id)) room.order.push(id)
+      chooseDrawer(room)
+      broadcastSnapshot(room)
+      const heartbeat = setInterval(() => sendEvent(res, 'ping', { at: Date.now() }), 15_000)
       req.on('close', () => {
         clearInterval(heartbeat)
-        r.clients.delete(id)
-        broadcast(r, 'presence', { players: r.clients.size })
+        room.clients.delete(id)
+        chooseDrawer(room)
+        broadcastSnapshot(room)
       })
       return
     }
 
     if (req.method === 'POST' && action === 'strokes') {
-      const data = await body(req)
+      const data = await readBody(req)
+      if (String(data.clientId || '') !== room.drawerId || room.correctGuess) {
+        sendJson(res, 403, { ok: false, message: 'Only the drawer can draw this round.' })
+        return
+      }
       const stroke = {
         id: randomUUID(),
         clientId: String(data.clientId || '').slice(0, 80),
         color: String(data.color || '#111827').slice(0, 24),
         size: Math.max(1, Math.min(36, Number(data.size) || 6)),
-        player: String(data.player || 'Guest').slice(0, 24),
         points: Array.isArray(data.points) ? data.points.slice(0, 800) : [],
         createdAt: Date.now()
       }
       if (stroke.points.length > 1) {
-        r.strokes.push(stroke)
-        broadcast(r, 'stroke', stroke)
+        room.strokes.push(stroke)
+        for (const client of room.clients.values()) sendEvent(client.res, 'stroke', stroke)
       }
-      json(res, 201, { ok: true, stroke })
+      sendJson(res, 201, { ok: true, stroke })
+      return
+    }
+
+    if (req.method === 'POST' && action === 'guess') {
+      const data = await readBody(req)
+      const text = String(data.text || '').trim().slice(0, 40)
+      const clientId = String(data.clientId || '').slice(0, 80)
+      const player = String(data.player || '玩家').slice(0, 24)
+      if (!text || clientId === room.drawerId) {
+        sendJson(res, 200, { ok: true })
+        return
+      }
+      const correct = text.replace(/\s/g, '') === room.word.replace(/\s/g, '')
+      const guess = { id: randomUUID(), player, text, correct, createdAt: Date.now() }
+      room.guesses.push(guess)
+      if (correct && !room.correctGuess) room.correctGuess = { player, word: room.word }
+      broadcastSnapshot(room)
+      sendJson(res, 200, { ok: true, correct })
       return
     }
 
     if (req.method === 'POST' && action === 'undo') {
-      const data = await body(req)
-      const clientId = String(data.clientId || '').slice(0, 80)
-      const reverseIndex = [...r.strokes].reverse().findIndex((stroke) => stroke.clientId === clientId)
-      if (reverseIndex >= 0) r.strokes.splice(r.strokes.length - 1 - reverseIndex, 1)
-      broadcast(r, 'snapshot', snapshot(r))
-      json(res, 200, { ok: true })
-      return
-    }
-
-    if (req.method === 'POST' && action === 'vote') {
-      const data = await body(req)
-      const choice = ['keep', 'chaos', 'restart'].includes(data.choice) ? data.choice : 'keep'
-      r.votes[choice] += 1
-      broadcast(r, 'votes', r.votes)
-      json(res, 200, { ok: true, votes: r.votes })
+      const data = await readBody(req)
+      if (String(data.clientId || '') === room.drawerId) {
+        room.strokes.pop()
+        broadcastSnapshot(room)
+      }
+      sendJson(res, 200, { ok: true })
       return
     }
 
     if (req.method === 'POST' && action === 'clear') {
-      r.strokes = []
-      broadcast(r, 'clear', { ok: true })
-      json(res, 200, { ok: true })
+      const data = await readBody(req)
+      if (String(data.clientId || '') === room.drawerId) {
+        room.strokes = []
+        broadcastSnapshot(room)
+      }
+      sendJson(res, 200, { ok: true })
       return
     }
 
     if (req.method === 'POST' && action === 'round') {
-      r.strokes = []
-      r.votes = { keep: 0, chaos: 0, restart: 0 }
-      r.roundEndsAt = Date.now() + 90_000
-      r.prompt = prompt()
-      broadcast(r, 'snapshot', snapshot(r))
-      json(res, 200, snapshot(r))
+      nextRound(room)
+      broadcastSnapshot(room)
+      sendJson(res, 200, { ok: true })
       return
     }
 
     if (req.method === 'GET') {
-      json(res, 200, snapshot(r))
+      sendJson(res, 200, snapshot(room, url.searchParams.get('clientId') || ''))
       return
     }
   }
 
-  await staticFile(req, res)
+  await serveStatic(req, res)
 })
 
 server.listen(port, () => {
