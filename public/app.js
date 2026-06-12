@@ -35,6 +35,7 @@ const state = {
   roundEndsAt: Date.now() + 120_000,
   isDrawer: false,
   correctGuess: null,
+  guessesLeft: 3,
   player: localStorage.getItem('doodle-player') || `玩家${Math.floor(100 + Math.random() * 900)}`,
   clientId: sessionStorage.getItem('doodle-client-id') || crypto.randomUUID()
 }
@@ -149,7 +150,9 @@ function renderGuesses(guesses) {
   for (const guess of guesses || []) {
     const item = document.createElement('div')
     item.className = guess.correct ? 'guess-item correct' : 'guess-item'
-    item.textContent = `${guess.player}: ${guess.text}${guess.correct ? ' - 猜中了' : ''}`
+    item.textContent = guess.correct
+      ? `${guess.player}: ${guess.text} - 猜中了`
+      : `${guess.player}: ${guess.text} - 还剩 ${guess.remaining} 次`
     guessList.append(item)
   }
 }
@@ -191,23 +194,28 @@ function updateInvite() {
 function setRoleUi(snapshot) {
   state.isDrawer = Boolean(snapshot.isDrawer)
   state.correctGuess = snapshot.correctGuess
+  state.guessesLeft = Number(snapshot.guessesLeft ?? 3)
   drawerText.textContent = snapshot.drawer?.name || '等待玩家'
-  wordText.textContent = snapshot.isDrawer ? `你要画：${snapshot.word}` : `提示：${snapshot.wordHint}`
+  wordText.textContent = snapshot.isDrawer ? `你要画：${snapshot.word}` : `提示：${snapshot.wordHint}，剩 ${state.guessesLeft} 次`
   playersText.textContent = String(snapshot.players || 1)
   roleBadge.textContent = snapshot.isDrawer ? '你是画手：只能你能画，别人看不到词' : '你是猜词者：观看并输入答案'
   roleBadge.classList.toggle('drawer', snapshot.isDrawer)
-  guessInput.disabled = snapshot.isDrawer || Boolean(snapshot.correctGuess)
-  guessBtn.disabled = snapshot.isDrawer || Boolean(snapshot.correctGuess)
+  guessInput.disabled = snapshot.isDrawer || Boolean(snapshot.correctGuess) || state.guessesLeft <= 0
+  guessBtn.disabled = snapshot.isDrawer || Boolean(snapshot.correctGuess) || state.guessesLeft <= 0
   undoBtn.disabled = !snapshot.isDrawer
   clearBtn.disabled = !snapshot.isDrawer
   canvas.classList.toggle('viewer', !snapshot.isDrawer)
 
-  if (snapshot.correctGuess) {
+  if (snapshot.roundMessage) {
+    resultText.textContent = snapshot.roundMessage
+  } else if (snapshot.correctGuess) {
     resultText.textContent = `${snapshot.correctGuess.player} 猜中了，答案是「${snapshot.correctGuess.word}」。`
   } else if (snapshot.isDrawer) {
     resultText.textContent = '你来画，不能把词语写在画布上。'
+  } else if (state.guessesLeft <= 0) {
+    resultText.textContent = '你本轮已经用完 3 次猜错机会。'
   } else {
-    resultText.textContent = '你来猜，答案不是越长越好，是越准越好。'
+    resultText.textContent = `你来猜，本轮还可以猜错 ${state.guessesLeft} 次。`
   }
 }
 

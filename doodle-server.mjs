@@ -43,12 +43,14 @@ function makeRoom(code) {
     clients: new Map(),
     order: [],
     scores: new Map(),
+    wrongCounts: new Map(),
     strokes: [],
     guesses: [],
     drawerId: '',
     word: nextWord(),
     roundEndsAt: Date.now() + 120_000,
-    correctGuess: null
+    correctGuess: null,
+    roundMessage: ''
   }
 }
 
@@ -66,6 +68,7 @@ function snapshot(room, clientId) {
   const drawer = room.clients.get(room.drawerId)
   const isDrawer = clientId === room.drawerId
   const scores = [...room.scores.values()].sort((a, b) => b.score - a.score || a.name.localeCompare(b.name))
+  const wrongCount = room.wrongCounts.get(clientId) || 0
   return {
     code: room.code,
     strokes: room.strokes,
@@ -76,8 +79,10 @@ function snapshot(room, clientId) {
     isDrawer,
     word: isDrawer ? room.word : '',
     wordHint: isDrawer ? room.word : `${room.word.length} 个字`,
+    guessesLeft: isDrawer ? null : Math.max(0, 3 - wrongCount),
     roundEndsAt: room.roundEndsAt,
-    correctGuess: room.correctGuess
+    correctGuess: room.correctGuess,
+    roundMessage: room.roundMessage
   }
 }
 
@@ -110,7 +115,7 @@ function chooseDrawer(room) {
   }
 }
 
-function nextRound(room) {
+function nextRound(room, message = '') {
   room.order = room.order.filter((id) => room.clients.has(id))
   if (room.order.length > 0) {
     const currentIndex = Math.max(0, room.order.indexOf(room.drawerId))
@@ -118,8 +123,10 @@ function nextRound(room) {
   }
   room.strokes = []
   room.guesses = []
+  room.wrongCounts = new Map()
   room.word = nextWord()
   room.correctGuess = null
+  room.roundMessage = message
   room.roundEndsAt = Date.now() + 120_000
 }
 
@@ -239,12 +246,26 @@ const server = createServer(async (req, res) => {
       const text = String(data.text || '').trim().slice(0, 40)
       const clientId = String(data.clientId || '').slice(0, 80)
       const player = String(data.player || '玩家').slice(0, 24)
-      if (!text || clientId === room.drawerId) {
+      if (!text || clientId === room.drawerId || room.correctGuess) {
         sendJson(res, 200, { ok: true })
         return
       }
+      const currentWrongCount = room.wrongCounts.get(clientId) || 0
+      if (currentWrongCount >= 3) {
+        sendJson(res, 200, { ok: false, exhausted: true })
+        return
+      }
       const correct = text.replace(/\s/g, '') === room.word.replace(/\s/g, '')
-      const guess = { id: randomUUID(), player, text, correct, createdAt: Date.now() }
+      const nextWrongCount = correct ? currentWrongCount : currentWrongCount + 1
+      if (!correct) room.wrongCounts.set(clientId, nextWrongCount)
+      const guess = {
+        id: randomUUID(),
+        player,
+        text,
+        correct,
+        remaining: correct ? Math.max(0, 3 - currentWrongCount) : Math.max(0, 3 - nextWrongCount),
+        createdAt: Date.now()
+      }
       room.guesses.push(guess)
       if (correct && !room.correctGuess) {
         const guesserScore = room.scores.get(clientId) || { id: clientId, name: player, score: 0 }
@@ -252,18 +273,13 @@ const server = createServer(async (req, res) => {
         guesserScore.score += 1
         room.scores.set(clientId, guesserScore)
 
-        const drawer = room.clients.get(room.drawerId)
-        if (drawer) {
-          const drawerScore = room.scores.get(drawer.id) || { id: drawer.id, name: drawer.name, score: 0 }
-          drawerScore.name = drawer.name
-          drawerScore.score += 1
-          room.scores.set(drawer.id, drawerScore)
-        }
-
         room.correctGuess = { player, word: room.word }
       }
+      if (!correct && nextWrongCount >= 3) {
+        nextRound(room, `${player} 已经猜错 3 次，自动进入下一轮。`)
+      }
       broadcastSnapshot(room)
-      sendJson(res, 200, { ok: true, correct })
+      sendJson(res, 200, { ok: true, correct, guessesLeft: Math.max(0, 3 - nextWrongCount) })
       return
     }
 
