@@ -1,0 +1,221 @@
+:root {
+  --ink: #111827;
+  --muted: #667085;
+  --line: #d7dde8;
+  --panel: rgba(255, 255, 255, 0.94);
+  --accent: #0f766e;
+  --accent-strong: #0b5f59;
+  --danger: #b42318;
+  --paper: #fbfcff;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    linear-gradient(90deg, rgba(15, 118, 110, 0.08) 1px, transparent 1px),
+    linear-gradient(rgba(37, 99, 235, 0.06) 1px, transparent 1px),
+    #eef4f7;
+  background-size: 28px 28px;
+  color: var(--ink);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+}
+
+button, input { font: inherit; }
+
+button {
+  min-height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+button:hover { border-color: var(--accent); }
+
+button:focus-visible, input:focus-visible {
+  outline: 3px solid rgba(15, 118, 110, 0.28);
+  outline-offset: 2px;
+}
+
+.app-shell {
+  display: grid;
+  grid-template-rows: auto auto 1fr auto;
+  gap: 10px;
+  height: 100vh;
+  padding: 10px;
+}
+
+.topbar, .toolbelt, .vote-panel {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: 0 8px 24px rgba(17, 24, 39, 0.08);
+}
+
+.topbar {
+  justify-content: space-between;
+  padding: 10px;
+}
+
+.room-block { min-width: 310px; }
+
+.room-row {
+  display: grid;
+  grid-template-columns: minmax(90px, 1fr) auto auto;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+#roomInput {
+  width: 100%;
+  min-height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 12px;
+  text-transform: uppercase;
+}
+
+.label {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.status-strip {
+  display: grid;
+  grid-template-columns: minmax(190px, 1.6fr) minmax(88px, 0.6fr) minmax(70px, 0.5fr) minmax(78px, 0.5fr);
+  gap: 12px;
+  width: min(720px, 100%);
+}
+
+.status-strip strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toolbelt {
+  flex-wrap: wrap;
+  padding: 8px;
+}
+
+.colors {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+}
+
+.swatch {
+  width: 34px;
+  min-height: 34px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px var(--line);
+}
+
+.swatch.active { box-shadow: 0 0 0 3px var(--accent); }
+.swatch[data-color="#111827"] { background: #111827; }
+.swatch[data-color="#ef4444"] { background: #ef4444; }
+.swatch[data-color="#f59e0b"] { background: #f59e0b; }
+.swatch[data-color="#10b981"] { background: #10b981; }
+.swatch[data-color="#2563eb"] { background: #2563eb; }
+.swatch[data-color="#7c3aed"] { background: #7c3aed; }
+
+.size-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+#sizeInput { width: 120px; }
+
+.board-wrap {
+  min-height: 260px;
+  overflow: hidden;
+  border: 1px solid #cdd6e3;
+  border-radius: 8px;
+  background: var(--paper);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.8), 0 12px 32px rgba(17, 24, 39, 0.1);
+  touch-action: none;
+}
+
+#board {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.vote-panel {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  padding: 8px;
+}
+
+.vote-panel button {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  color: #fff;
+  background: var(--accent);
+  border-color: var(--accent-strong);
+  font-weight: 700;
+}
+
+.vote-panel button:nth-child(2) {
+  background: #6d28d9;
+  border-color: #5b21b6;
+}
+
+.vote-panel button:nth-child(3) {
+  background: var(--danger);
+  border-color: #912018;
+}
+
+.vote-panel strong {
+  min-width: 28px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+@media (max-width: 760px) {
+  .app-shell {
+    height: 100svh;
+    padding: 8px;
+    gap: 8px;
+  }
+
+  .topbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .room-block { min-width: 0; }
+  .status-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+  .toolbelt {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .colors, .size-control { grid-column: 1 / -1; }
+  .colors { justify-content: space-between; }
+  .vote-panel { grid-template-columns: 1fr; }
+}
