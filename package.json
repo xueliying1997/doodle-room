@@ -1,0 +1,14 @@
+{
+  "name": "doodle-room-mvp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Multiplayer doodle whiteboard game MVP.",
+  "type": "module",
+  "scripts": {
+    "start": "node doodle-server.mjs",
+    "dev": "node doodle-server.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
