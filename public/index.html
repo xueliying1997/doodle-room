@@ -26,6 +26,7 @@
             </div>
           </div>
         </div>
+
         <div class="status-strip" aria-live="polite">
           <div><span class="label">本轮画手</span><strong id="drawerText">等待玩家</strong></div>
           <div><span class="label">你的提示</span><strong id="wordText">加入房间后开始</strong></div>
@@ -43,6 +44,12 @@
           <button class="swatch" type="button" data-color="#2563eb" aria-label="蓝色"></button>
           <button class="swatch" type="button" data-color="#7c3aed" aria-label="紫色"></button>
         </div>
+
+        <form id="guessForm" class="guess-form">
+          <input id="guessInput" aria-label="输入猜测" placeholder="输入你猜的词" autocomplete="off" />
+          <button id="guessBtn" type="submit">提交猜测</button>
+        </form>
+
         <label class="size-control"><span class="label">笔刷</span><input id="sizeInput" type="range" min="2" max="28" value="6" /></label>
         <button id="undoBtn" type="button">撤销</button>
         <button id="clearBtn" type="button">清空</button>
@@ -55,13 +62,13 @@
         <div id="roleBadge" class="role-badge">连接中</div>
       </section>
 
-      <section class="guess-panel" aria-label="猜词">
-        <form id="guessForm" class="guess-form">
-          <input id="guessInput" aria-label="输入猜测" placeholder="输入你猜的词" autocomplete="off" />
-          <button id="guessBtn" type="submit">提交猜测</button>
-        </form>
+      <section class="guess-panel" aria-label="猜词记录和积分">
         <div id="resultText" class="result-text">观看画手作画，然后猜词。</div>
         <div id="guessList" class="guess-list" aria-live="polite"></div>
+        <div class="scoreboard" aria-label="积分表">
+          <div class="scoreboard-title">积分表</div>
+          <div id="scoreList" class="score-list" aria-live="polite"></div>
+        </div>
       </section>
     </main>
     <script src="/app.js" type="module"></script>

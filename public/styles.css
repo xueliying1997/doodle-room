@@ -152,12 +152,14 @@ button:focus-visible, input:focus-visible {
 .toolbelt {
   flex-wrap: wrap;
   padding: 8px;
+  justify-content: flex-end;
 }
 
 .colors {
   display: flex;
   gap: 7px;
   align-items: center;
+  margin-right: auto;
 }
 
 .swatch {
@@ -228,14 +230,15 @@ button:focus-visible, input:focus-visible {
 
 .guess-panel {
   display: grid;
-  grid-template-columns: minmax(260px, 0.8fr) minmax(180px, 0.6fr) minmax(240px, 1fr);
+  grid-template-columns: minmax(180px, 0.5fr) minmax(260px, 1fr) minmax(220px, 0.8fr);
   padding: 8px;
 }
 
 .guess-form {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: minmax(180px, 320px) auto;
   gap: 8px;
+  align-items: center;
 }
 
 .result-text {
@@ -268,6 +271,64 @@ button:focus-visible, input:focus-visible {
   font-weight: 800;
 }
 
+.scoreboard {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.scoreboard-title {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.score-list {
+  display: grid;
+  gap: 6px;
+  max-height: 112px;
+  overflow: auto;
+}
+
+.score-item {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.score-rank {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #eef4f7;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.score-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.score-value {
+  color: var(--accent-strong);
+}
+
+.score-empty {
+  color: var(--muted);
+  font-size: 13px;
+}
+
 @media (max-width: 760px) {
   .app-shell {
     height: 100svh;
@@ -293,7 +354,11 @@ button:focus-visible, input:focus-visible {
     grid-template-columns: 1fr 1fr;
   }
 
-  .colors, .size-control { grid-column: 1 / -1; }
-  .colors { justify-content: space-between; }
+  .colors, .guess-form, .size-control { grid-column: 1 / -1; }
+  .colors {
+    justify-content: space-between;
+    margin-right: 0;
+  }
+  .guess-form { grid-template-columns: 1fr auto; }
   .guess-panel { grid-template-columns: 1fr; }
 }

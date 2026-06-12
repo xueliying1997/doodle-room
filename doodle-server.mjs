@@ -42,6 +42,7 @@ function makeRoom(code) {
     code,
     clients: new Map(),
     order: [],
+    scores: new Map(),
     strokes: [],
     guesses: [],
     drawerId: '',
@@ -64,11 +65,13 @@ function publicClient(client) {
 function snapshot(room, clientId) {
   const drawer = room.clients.get(room.drawerId)
   const isDrawer = clientId === room.drawerId
+  const scores = [...room.scores.values()].sort((a, b) => b.score - a.score || a.name.localeCompare(b.name))
   return {
     code: room.code,
     strokes: room.strokes,
     guesses: room.guesses.slice(-12),
     players: room.clients.size,
+    scores,
     drawer: publicClient(drawer),
     isDrawer,
     word: isDrawer ? room.word : '',
@@ -195,6 +198,8 @@ const server = createServer(async (req, res) => {
       })
       room.clients.set(id, { id, name, res })
       if (!room.order.includes(id)) room.order.push(id)
+      if (!room.scores.has(id)) room.scores.set(id, { id, name, score: 0 })
+      else room.scores.get(id).name = name
       chooseDrawer(room)
       broadcastSnapshot(room)
       const heartbeat = setInterval(() => sendEvent(res, 'ping', { at: Date.now() }), 15_000)
@@ -241,7 +246,22 @@ const server = createServer(async (req, res) => {
       const correct = text.replace(/\s/g, '') === room.word.replace(/\s/g, '')
       const guess = { id: randomUUID(), player, text, correct, createdAt: Date.now() }
       room.guesses.push(guess)
-      if (correct && !room.correctGuess) room.correctGuess = { player, word: room.word }
+      if (correct && !room.correctGuess) {
+        const guesserScore = room.scores.get(clientId) || { id: clientId, name: player, score: 0 }
+        guesserScore.name = player
+        guesserScore.score += 1
+        room.scores.set(clientId, guesserScore)
+
+        const drawer = room.clients.get(room.drawerId)
+        if (drawer) {
+          const drawerScore = room.scores.get(drawer.id) || { id: drawer.id, name: drawer.name, score: 0 }
+          drawerScore.name = drawer.name
+          drawerScore.score += 1
+          room.scores.set(drawer.id, drawerScore)
+        }
+
+        room.correctGuess = { player, word: room.word }
+      }
       broadcastSnapshot(room)
       sendJson(res, 200, { ok: true, correct })
       return

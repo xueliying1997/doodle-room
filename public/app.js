@@ -22,6 +22,7 @@ const guessInput = document.querySelector('#guessInput')
 const guessBtn = document.querySelector('#guessBtn')
 const resultText = document.querySelector('#resultText')
 const guessList = document.querySelector('#guessList')
+const scoreList = document.querySelector('#scoreList')
 
 const state = {
   room: new URLSearchParams(location.search).get('room') || '',
@@ -153,6 +154,32 @@ function renderGuesses(guesses) {
   }
 }
 
+function renderScores(scores) {
+  scoreList.innerHTML = ''
+  if (!scores || scores.length === 0) {
+    const empty = document.createElement('div')
+    empty.className = 'score-empty'
+    empty.textContent = '暂无玩家'
+    scoreList.append(empty)
+    return
+  }
+  for (const [index, player] of scores.entries()) {
+    const item = document.createElement('div')
+    item.className = 'score-item'
+    const rank = document.createElement('span')
+    rank.className = 'score-rank'
+    rank.textContent = String(index + 1)
+    const name = document.createElement('span')
+    name.className = 'score-name'
+    name.textContent = player.name
+    const score = document.createElement('strong')
+    score.className = 'score-value'
+    score.textContent = `${player.score} 分`
+    item.append(rank, name, score)
+    scoreList.append(item)
+  }
+}
+
 function updateInvite() {
   if (!state.room) return
   const url = `${location.origin}${location.pathname}?room=${state.room}`
@@ -193,6 +220,7 @@ function applySnapshot(snapshot) {
   updateInvite()
   setRoleUi(snapshot)
   renderGuesses(snapshot.guesses)
+  renderScores(snapshot.scores)
   drawAll()
 }
 
